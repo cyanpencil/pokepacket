@@ -16,19 +16,30 @@
 }
 
 .file {
-	margin: 0.5em 0em;
+	margin-bottom: 0.5em;
 	display: block;
+	width: 20em;
+	text-overflow: clip;
 }
+
+.outgoing{
+	color: var(--color-5);
+}
+
+.incoming{
+	color: var(--color-6);
+}
+
 </style>
 
 <div class="files">
 
 {{ range $p := .Packets}}
-	<span class="file">&gt; 
-	{{ $p.Payload_str }} <br/>
-	{{ $p.Payload_hex }}
-	{{ if $p.Outgoing }} ciao {{ else }} bella {{end}}
-	</span>
+	&gt;[{{ $p.Direction }}]{{ if $p.Outgoing }} outgoing {{ else }} incoming {{end}} <br/>
+	<span class="file {{if $p.Outgoing}}outgoing{{else}}incoming{{end}}">
+		{{ $p.Payload_str }} <br/>
+		{{ $p.Payload_hex }}
+	</span> 
 {{ end }}
 
 </div>

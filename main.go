@@ -29,6 +29,7 @@ type Packet struct {
 	Outgoing bool
 	Payload_str string
 	Payload_hex string
+	Direction   string
 }
 
 func write_pcap(filename string, packets_flow []gopacket.Packet) {
@@ -118,13 +119,15 @@ func read_pcap(filename string)([]Packet) {
 		if tcpLayer := packet.TransportLayer(); tcpLayer != nil {
 			tcpFlow := tcpLayer.TransportFlow()
 			srcPort = tcpFlow.Src().String()
-			destPort = tcpFlow.Src().String()
+			destPort = tcpFlow.Dst().String()
 			src += ":" + srcPort
 			dest += ":" + destPort
 
 			if myport == "" {myport = destPort}
 
 			payload := tcpLayer.LayerPayload()
+			if len(payload) == 0 {continue}
+
 			payload_hex := hex.EncodeToString(payload)
 			for i := 0; i < len(payload); i++ {
 				if payload[i] > 0x7f || payload[i] < 0x9 {
@@ -132,7 +135,8 @@ func read_pcap(filename string)([]Packet) {
 				}
 			}
 			payload_str := string(payload)
-			to_ret = append(to_ret, Packet{destPort == myport, payload_str, destPort + payload_hex})
+			direction := src + "  -> " + dest;
+			to_ret = append(to_ret, Packet{destPort == myport, payload_str, payload_hex, direction})
 		}
 	}
 	return to_ret
@@ -192,8 +196,6 @@ func main() {
 	}
 	link_type = handle.LinkType()
 
-	svcEP := layers.NewTCPPortEndpoint(80)
-
 	filter := ""
 	for k, _ := range port_service_map {
 		if len(filter) > 0 { filter += " or " }
@@ -233,38 +235,38 @@ func main() {
 		var src, dest string
 		var srcPort, destPort string
 		var srcIp gopacket.Endpoint
-		var dstIp gopacket.Endpoint
+		//var dstIp gopacket.Endpoint
 		inbound := true
 		if netLayer := packet.NetworkLayer(); netLayer != nil {
 			netFlow := netLayer.NetworkFlow()
 			src = netFlow.Src().String()
 			dest = netFlow.Dst().String()
 			srcIp = netFlow.Src()
-			dstIp = netFlow.Dst()
+			//dstIp = netFlow.Dst()
 		}
 		if tcpLayer := packet.TransportLayer(); tcpLayer != nil {
 			tcpFlow := tcpLayer.TransportFlow()
 			srcPort = tcpFlow.Src().String()
-			destPort = tcpFlow.Src().String()
+			destPort = tcpFlow.Dst().String()
 			src += ":" + srcPort
 			dest += ":" + destPort
-			if tcpFlow.Src() == svcEP {
+			flow_idx := src+dest;
+			if _, ok := port_service_map[destPort]; ok {
 				inbound = false
-				srcIp = dstIp
-				src = dest
+				flow_idx = dest+src;
 			}
 			true_src := strings.ReplaceAll(strings.ReplaceAll(src, ".", "_"), ":", "_")
-			packets_flow[src] = append(packets_flow[src], packet)
+			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
 			packets_port[destPort] = append(packets_port[destPort], packet)
-			fmt.Printf("Length: %d from %s\n", len(packets_flow[src]), srcIp);
+			fmt.Printf("Length: %d from %s to %s\n", len(packets_flow[flow_idx]), src, dest);
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
 				fmt.Printf("user %s got flag returned!\n", srcIp)
 				// dump packets relative to this flow
 				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[destPort], true_src)
-				write_pcap(filename, packets_flow[src])
+				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag
 				// XXX: is this the right thing to do ? 
-				packets_flow[src] = []gopacket.Packet{}
+				packets_flow[flow_idx] = []gopacket.Packet{}
 
 				// dump last 100 packets relative to this port/service (still todo)
 				filename = fmt.Sprintf("%s/total_%s.pcap", port_service_map[destPort], true_src)

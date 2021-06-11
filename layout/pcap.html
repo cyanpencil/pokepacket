@@ -1,0 +1,35 @@
+{{ template "header" .Services }}
+
+
+<style>
+.files {
+	color: var(--color-2);
+	background-color: var(--color-4);
+	padding: 0.5em 1em;
+}
+
+.filestitle {
+	font-weight: bold;
+	font-size: 1.1em;
+	text-align: center;
+	display: block;
+}
+
+.file {
+	margin: 0.5em 0em;
+	display: block;
+}
+</style>
+
+<div class="files">
+
+{{ range $p := .Packets}}
+	<span class="file">&gt; 
+	{{ $p.Payload_str }} <br/>
+	{{ $p.Payload_hex }}
+	{{ if $p.Outgoing }} ciao {{ else }} bella {{end}}
+	</span>
+{{ end }}
+
+</div>
+

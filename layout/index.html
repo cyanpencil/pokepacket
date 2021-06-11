@@ -1,0 +1,127 @@
+{{define "header"}}
+<head>
+<style>
+:root {
+	--color-3: #2e3d34; /* background */
+	--color-1: #515036; /* link color */
+	--color-4: #746a3c;
+	--color-2: #c2b49b;
+}
+
+body {
+	background-color: var(--color-1);
+	font-family: "monospace";
+	margin: 1em;
+}
+
+a {
+	color: var(--color-2);
+}
+
+.header {
+	background-color: var(--color-3);
+	text-align: justify;
+	padding: 0.5em;
+	margin-bottom: 1em;
+}
+
+.topheader {
+	text-align: center;
+	font-weight: bold;
+	height: 2em;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.topheader div {
+	vertical-align: middle;
+	font-weight: bold;
+	color: var(--color-2);
+	font-size: 1.3em;
+}
+
+.middleheader {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: 3em;
+}
+
+.headeritem {
+	flex-grow: 1;
+	width: 20px;
+	text-align: center;
+	font-weight: bold;
+}
+
+.headeritem + .headeritem {
+	margin-left: 2%;
+}
+
+.banner {
+	/*text-align:center;*/
+	color: var(--color-2);
+	font-weight: bold;
+	text-shadow: 0 0 2px #ffffff88;
+	white-space: pre;
+	font-size: 0.8em;
+	font-family: 'Fira Code' 'monospace';
+	text-align: center;
+}
+
+.highlight{
+	color: #f8b432;
+	font-weight: bold;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="banner">
+
+              ,a000a,                                                                            
+            ,0Y"' '"Y0,                                                                         
+           ,0Y       Y0, dP                                            dP                  dP   
+           00   <span class="highlight">ORG</span>   00 88                                            88                  88   
+  88d888.b 00   <span class="highlight">ANI</span>   00 88  .dP  .d8888b.  88d888b. .d8888b. .d8888b. 88  .dP  .d8888b. d8888P 
+  88'  `88 00  {<span class="highlight">S</span>|<span class="highlight">Z</span>}  00 88888"   88ooood8  88'  `88 88'  `88 88'  `"" 88888"   88ooood8   88   
+  88.  .88 00   <span class="highlight">ERS</span>   00 88  `8b. 88.  ...  88.  .88 88.  .88 88.  ... 88  `8b. 88.  ...   88   
+  88Y888P' `0b       d0' dP   `YP `88888P'  88Y888P' `88888P8 `88888P' dP   `YP `88888P'   dP   
+  88        `0ba, ,ad0'                     88                                                  
+  dP          "Y000Y"                       dP                                                  
+          
+</div>
+
+<!--
+<div class="banner">
+                     dP                                            dP                  dP   
+                     88                                            88                  88   
+   88d888.b .d8888b. 88  .dP  .d8888b.  88d888b. .d8888b. .d8888b. 88  .dP  .d8888b. d8888P 
+   88'  `88 88'  `88 88888"   88ooood8  88'  `88 88'  `88 88'  `"" 88888"   88ooood8   88   
+   88.  .88 88.  .88 88  `8b. 88.  ...  88.  .88 88.  .88 88.  ... 88  `8b. 88.  ...   88   
+   88Y888P' `88888P' dP   `YP `88888P'  88Y888P' `88888P8 `88888P' dP   `YP `88888P'   dP   
+  ==88===================================88===================================================
+   dP                                   dP                                                  
+
+</div>
+-->
+
+<div class="header">
+	<div class="topheader">
+		<div>AVAILABLE SERVICES:</div>
+	</div>
+	<div class="middleheader">
+		{{range $k, $v := . }} 
+		<a class="headeritem" href="/{{$v}}">[{{$v}} - {{$k}}]</a>
+		{{end}}
+	</div>
+</div>
+</body>
+{{end}}
+
+
+
+{{ template "header"  .}}

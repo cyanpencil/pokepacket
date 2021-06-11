@@ -1,0 +1,34 @@
+{{ template "header" .Services }}
+
+
+<style>
+.files {
+	color: var(--color-2);
+	background-color: var(--color-4);
+	padding: 0.5em 1em;
+}
+
+.filestitle {
+	font-weight: bold;
+	font-size: 1.1em;
+	text-align: center;
+	display: block;
+}
+
+.file {
+	margin: 0.5em 0em;
+	display: block;
+}
+</style>
+
+<div class="files">
+
+<span class="filestitle">
+	-* Select a file: *-
+</span>
+
+{{ range $file,$size := .Pcaps}}
+<span class="file">&gt; <a href="{{$file}}"> {{ $file }}</a> ({{$size}} bytes)</span>
+{{ end }}
+</div>
+

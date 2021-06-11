@@ -2,12 +2,6 @@
 
 
 <style>
-.files {
-	color: var(--color-2);
-	background-color: var(--color-4);
-	padding: 0.5em 1em;
-}
-
 .filestitle {
 	font-weight: bold;
 	font-size: 1.1em;
@@ -15,32 +9,61 @@
 	display: block;
 }
 
-.file {
-	margin-bottom: 0.5em;
-	display: block;
-	width: 20em;
-	text-overflow: clip;
+.payload {
+	white-space: pre;
 }
 
-.outgoing{
+.packet {
+	color: var(--color-2);
+	background-color: var(--color-4);
+	padding: 0.5em 1em;
+	margin-bottom: 0.5em;
+	word-break: break-all;
+}
+
+.outgoingf{
+	margin-left: 4em;
+	margin-right: 0em;
+	box-shadow: -3px 3px 0px 0 #333;
+}
+
+.incomingf{
+	margin-left: 0em;
+	margin-right: 4em;
+	box-shadow: -3px 3px 0px 0 #333;
+}
+
+.outgoingf span{
 	color: var(--color-5);
 }
 
-.incoming{
+.incomingf span{
 	color: var(--color-6);
 }
 
+
 </style>
 
-<div class="files">
+
+<center>
+<label for="chkHex"><input type="checkbox" id="chkHex" onclick="togglehex()"/>show hex</label>
+</center>
+<br/>
 
 {{ range $p := .Packets}}
-	&gt;[{{ $p.Direction }}]{{ if $p.Outgoing }} outgoing {{ else }} incoming {{end}} <br/>
-	<span class="file {{if $p.Outgoing}}outgoing{{else}}incoming{{end}}">
-		{{ $p.Payload_str }} <br/>
-		{{ $p.Payload_hex }}
-	</span> 
+	<div class="packet {{if $p.Outgoing}}outgoingf{{else}}incomingf{{end}}">
+		<center>[{{ $p.Direction }}]</center>
+		<span class="payload">{{ $p.Payload_str }}</span>
+		<span class="hex" style="display:none">{{ $p.Payload_hex }}</span>
+	</div>
 {{ end }}
 
-</div>
+
+<script>
+function togglehex() {
+	document.querySelectorAll('.hex').forEach(a=>a.style.display = a.style.display != 'none' ? 'none' : 'inline');
+}
+
+if (document.querySelector('input').checked === true) togglehex();
+</script>
 

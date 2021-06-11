@@ -282,14 +282,15 @@ func main() {
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
 				fmt.Printf("user %s got flag returned!\n", srcIp)
 				// dump packets relative to this flow
-				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], true_src)
+				time := time.Now().Format("15_04_03.99")
+				filename := fmt.Sprintf("%s/flag_%s_%s.pcap", port_service_map[servicePort.String()], true_src, time)
 				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag
 				// XXX: is this the right thing to do ?
 				packets_flow[flow_idx] = []gopacket.Packet{}
 
 				// dump last 100 packets relative to this port/service (still todo)
-				filename = fmt.Sprintf("%s/total_%s.pcap", port_service_map[servicePort.String()], true_src)
+				filename = fmt.Sprintf("%s/total_%s_%s.pcap", port_service_map[servicePort.String()], true_src, time)
 				write_pcap(filename, packets_port[servicePort])
 			}
 		}

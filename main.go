@@ -183,10 +183,10 @@ func main() {
 	init_config()
 	serve()
 
-	//time.Sleep(time.Second * 5)
 	iface := os.Args[1]
 	fmt.Printf("dumping packets on %s\n", iface)
 
+	// XXX:  change this
 	update_time := time.Second
 
 	handle, err := pcap.OpenLive(iface, 65536, false, update_time)
@@ -262,7 +262,7 @@ func main() {
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
 				fmt.Printf("user %s got flag returned!\n", srcIp)
 				// dump packets relative to this flow
-				time := time.Now().Format("15_04_03.99")
+				time := time.Now().Format("15_04_03_99")
 				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[destPort], time)
 				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag

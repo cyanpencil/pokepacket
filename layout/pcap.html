@@ -16,10 +16,16 @@
 }
 
 .file {
-	margin-bottom: 0.5em;
+	margin-bottom: 1em;
 	display: block;
 	width: 20em;
 	text-overflow: clip;
+	word-break: break-all;
+	width: 100%;
+}
+
+.payload {
+	white-space: pre;
 }
 
 .outgoing{
@@ -34,13 +40,26 @@
 
 <div class="files">
 
+<center>
+<label for="chkHex"><input type="checkbox" id="chkHex" onclick="togglehex()"/>show hex</label>
+</center>
+<br/>
+
 {{ range $p := .Packets}}
-	&gt;[{{ $p.Direction }}]{{ if $p.Outgoing }} outgoing {{ else }} incoming {{end}} <br/>
-	<span class="file {{if $p.Outgoing}}outgoing{{else}}incoming{{end}}">
-		{{ $p.Payload_str }} <br/>
-		{{ $p.Payload_hex }}
-	</span> 
+&gt; [{{ $p.Direction }}]{{ if $p.Outgoing }} outgoing {{ else }} incoming {{end}} <br/>
+<span class="file {{if $p.Outgoing}}outgoing{{else}}incoming{{end}}">
+<span class="payload">{{ $p.Payload_str }}</span>
+<span class="hex" style="display:none">{{ $p.Payload_hex }}</span>
+</span> 
 {{ end }}
 
 </div>
+
+<script>
+function togglehex() {
+	document.querySelectorAll('.hex').forEach(a=>a.style.display = a.style.display != 'none' ? 'none' : 'inline');
+}
+
+if (document.querySelector('input').checked === true) togglehex();
+</script>
 

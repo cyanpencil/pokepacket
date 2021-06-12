@@ -27,8 +27,8 @@
 	-* Select a file: *-
 </span>
 
-{{ range $file,$size := .Pcaps}}
-<span class="file">&gt; <a href="{{$file}}"> {{ $file }}</a> ({{$size}} bytes)</span>
+{{ range $i,$file := .Pcaps}}
+<span class="file">&gt; <a href="{{$file}}"> {{ $file }}</a> ({{index $.Sizes $i}} bytes)</span>
 {{ end }}
 </div>
 

@@ -2,18 +2,18 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
-	"net/http"
 	"html/template"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
-	"io/ioutil"
-	"strconv"
-	"encoding/hex"
+	"sort"
 
-	"gopkg.in/yaml.v2"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -21,12 +21,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
 )
 
 var link_type layers.LinkType
-var port_service_map map[string]string 
+var port_service_map map[string]string
+
 type Packet struct {
-	Outgoing bool
+	Outgoing    bool
 	Payload_str string
 	Payload_hex string
 	Direction   string
@@ -46,18 +48,23 @@ func write_pcap(filename string, packets_flow []gopacket.Packet) {
 	}
 }
 
-func list_pcaps(cose string) (map[string]string) {
+func list_pcaps(cose string) ([]string, []string) {
 	files, err := ioutil.ReadDir("./dumps/" + cose + "/")
 	if err != nil {
 		fmt.Printf("failed to read directory: dumps/%s\n", cose)
 	}
+	sort.Slice(files, func(i,j int) bool{
+		return files[i].ModTime().Unix() < files[j].ModTime().Unix()
+	})
 
-	var pcaps = make(map[string]string)
-	for _, f := range files {
-		pcaps[f.Name()] = strconv.FormatInt(f.Size(), 10)
+	var pcaps = make([]string, len(files))
+	var sizes = make([]string, len(files))
+
+	for i, f := range files {
+		pcaps[i] = f.Name()
+		sizes[i] = strconv.FormatInt(f.Size(), 10)
 	}
-	fmt.Printf("%v\n", pcaps);
-	return pcaps
+	return pcaps, sizes
 }
 
 func init_config() {
@@ -75,8 +82,8 @@ func init_config() {
 	}
 	port_service_map = make(map[string]string)
 
-	for service,port := range m {
-		fmt.Printf("Listening for service \x1b[33;1m%s\x1b[0m on port \x1b[34;1m%d\x1b[0m\n", service,port)
+	for service, port := range m {
+		fmt.Printf("Listening for service \x1b[33;1m%s\x1b[0m on port \x1b[34;1m%d\x1b[0m\n", service, port)
 		foldername := fmt.Sprintf("dumps/%s", service)
 		os.MkdirAll(foldername, os.ModePerm)
 		portname := strconv.Itoa(port)
@@ -89,7 +96,7 @@ func init_config() {
 	}
 }
 
-func read_pcap(filename string)([]Packet) {
+func read_pcap(filename string) []Packet {
 	fmt.Printf("Reading %s\n", filename)
 
 	handle, err := pcap.OpenOffline(filename)
@@ -100,15 +107,13 @@ func read_pcap(filename string)([]Packet) {
 	defer handle.Close()
 
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	packets := packetSource.Packets();
-
-	var myport string = ""
+	packets := packetSource.Packets()
 
 	var to_ret []Packet
 
-	i := 0;
+	i := 0
 	for packet := range packets {
-		i += 1;
+		i += 1
 		var src, dest string
 		var srcPort, destPort string
 		if netLayer := packet.NetworkLayer(); netLayer != nil {
@@ -123,10 +128,15 @@ func read_pcap(filename string)([]Packet) {
 			src += ":" + srcPort
 			dest += ":" + destPort
 
-			if myport == "" {myport = destPort}
+			outgoing := false
+			if _,ok := port_service_map[srcPort]; ok {
+				outgoing = true
+			}
 
 			payload := tcpLayer.LayerPayload()
-			if len(payload) == 0 {continue}
+			if len(payload) == 0 {
+				continue
+			}
 
 			payload_hex := hex.EncodeToString(payload)
 			for i := 0; i < len(payload); i++ {
@@ -135,8 +145,8 @@ func read_pcap(filename string)([]Packet) {
 				}
 			}
 			payload_str := string(payload)
-			direction := src + "  -> " + dest;
-			to_ret = append(to_ret, Packet{destPort == myport, payload_str, payload_hex, direction})
+			direction := src + "  -> " + dest
+			to_ret = append(to_ret, Packet{outgoing, payload_str, payload_hex, direction})
 		}
 	}
 	return to_ret
@@ -152,26 +162,27 @@ func serve() {
 	})
 
 	for _, service := range port_service_map {
-		http.HandleFunc("/" + service + "/", func(w http.ResponseWriter, r *http.Request) {
-			ss := strings.Split(r.RequestURI, "/");
+		http.HandleFunc("/"+service+"/", func(w http.ResponseWriter, r *http.Request) {
+			ss := strings.Split(r.RequestURI, "/")
 			servicename := ss[1]
-			if len(ss) > 2 && strings.HasSuffix(ss[2], ".pcap"){
+			if len(ss) > 2 && strings.HasSuffix(ss[2], ".pcap") {
 				filename := fmt.Sprintf("dumps/%s/%s", servicename, ss[2])
 				packets := read_pcap(filename)
 				type pageData struct {
-					Services   map[string]string
-					Packets   []Packet
+					Services map[string]string
+					Packets  []Packet
 				}
 				tmpl := template.Must(template.ParseFiles("layout/pcap.html", "layout/index.html"))
 				tmpl.Execute(w, pageData{port_service_map, packets})
 			} else {
-				pcaps := list_pcaps(servicename)
+				pcaps, sizes := list_pcaps(servicename)
 				type pageData struct {
-					Services   map[string]string
-					Pcaps	   map[string]string
+					Services map[string]string
+					Pcaps    []string
+					Sizes    []string
 				}
 				tmpl := template.Must(template.ParseFiles("layout/service.html", "layout/index.html"))
-				tmpl.Execute(w, pageData{port_service_map, pcaps})
+				tmpl.Execute(w, pageData{port_service_map, pcaps, sizes})
 			}
 		})
 	}
@@ -198,7 +209,9 @@ func main() {
 
 	filter := ""
 	for k, _ := range port_service_map {
-		if len(filter) > 0 { filter += " or " }
+		if len(filter) > 0 {
+			filter += " or "
+		}
 		filter += "port " + k
 	}
 	fmt.Printf("Using bpf filter \"\x1b[33m%s\x1b[0m\"\n", filter)
@@ -210,9 +223,8 @@ func main() {
 
 	stats := make(map[gopacket.Endpoint]uint64)
 
-	packets_flow := make(map[string][]gopacket.Packet)
-	packets_port := make(map[string][]gopacket.Packet)
-
+	packets_flow := make(map[uint64][]gopacket.Packet)
+	packets_port := make(map[gopacket.Endpoint][]gopacket.Packet)
 
 	counter := promauto.NewCounterVec(prometheus.CounterOpts{
 		Namespace: "tcp",
@@ -233,45 +245,59 @@ func main() {
 	packetSrc := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSrc.Packets() {
 		var src, dest string
-		var srcPort, destPort string
 		var srcIp gopacket.Endpoint
-		//var dstIp gopacket.Endpoint
-		inbound := true
+		var dstIp gopacket.Endpoint
+
+		var inbound bool
+		var servicePort gopacket.Endpoint
+
 		if netLayer := packet.NetworkLayer(); netLayer != nil {
 			netFlow := netLayer.NetworkFlow()
-			src = netFlow.Src().String()
-			dest = netFlow.Dst().String()
+
 			srcIp = netFlow.Src()
-			//dstIp = netFlow.Dst()
+			dstIp = netFlow.Dst()
 		}
+
 		if tcpLayer := packet.TransportLayer(); tcpLayer != nil {
 			tcpFlow := tcpLayer.TransportFlow()
-			srcPort = tcpFlow.Src().String()
-			destPort = tcpFlow.Dst().String()
-			src += ":" + srcPort
-			dest += ":" + destPort
-			flow_idx := src+dest;
-			if _, ok := port_service_map[destPort]; ok {
+			srcPort := tcpFlow.Src()
+			dstPort := tcpFlow.Dst()
+
+			flow_idx := tcpFlow.FastHash()
+
+			src = srcIp.String() + ":" + srcPort.String()
+			dest = dstIp.String() + ":" + dstPort.String()
+
+			if dstIp.String() == "YOUR LOCAL IP HERE" {
+				inbound = true
+				servicePort = dstPort
+			} else {
 				inbound = false
-				flow_idx = dest+src;
+				servicePort = srcPort
 			}
-			//true_src := strings.ReplaceAll(strings.ReplaceAll(src, ".", "_"), ":", "_")
+
+			true_src := strings.ReplaceAll(strings.ReplaceAll(src, ".", "_"), ":", "_")
+
+			// Flow idx (from fasthash) is direction independent
 			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
-			packets_port[destPort] = append(packets_port[destPort], packet)
-			fmt.Printf("Length: %d from %s to %s\n", len(packets_flow[flow_idx]), src, dest);
+			packets_port[servicePort] = append(packets_port[servicePort], packet)
+
+			fmt.Printf("Fwid: %d, length: %d [from %s to %s] inbound(%v) packet\n",
+				flow_idx, len(packets_flow[flow_idx]), src, dest, inbound)
+
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
 				fmt.Printf("user %s got flag returned!\n", srcIp)
 				// dump packets relative to this flow
 				time := time.Now().Format("15_04_03_99")
-				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[destPort], time)
+				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], time)
 				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag
-				// XXX: is this the right thing to do ? 
+				// XXX: is this the right thing to do ?
 				packets_flow[flow_idx] = []gopacket.Packet{}
 
 				// dump last 100 packets relative to this port/service (still todo)
-				filename = fmt.Sprintf("%s/total_%s.pcap", port_service_map[destPort], time)
-				write_pcap(filename, packets_port[destPort])
+				filename = fmt.Sprintf("%s/total_%s_%s.pcap", port_service_map[servicePort.String()], true_src, time)
+				write_pcap(filename, packets_port[servicePort])
 			}
 		}
 		stats[srcIp] += uint64(packet.Metadata().CaptureInfo.CaptureLength)

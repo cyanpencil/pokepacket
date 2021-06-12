@@ -54,7 +54,7 @@ func list_pcaps(cose string) ([]string, []string) {
 		fmt.Printf("failed to read directory: dumps/%s\n", cose)
 	}
 	sort.Slice(files, func(i,j int) bool{
-		return files[i].ModTime().Unix() < files[j].ModTime().Unix()
+		return files[i].ModTime().Unix() > files[j].ModTime().Unix()
 	})
 
 	var pcaps = make([]string, len(files))
@@ -276,8 +276,6 @@ func main() {
 				servicePort = srcPort
 			}
 
-			true_src := strings.ReplaceAll(strings.ReplaceAll(src, ".", "_"), ":", "_")
-
 			// Flow idx (from fasthash) is direction independent
 			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
 			packets_port[servicePort] = append(packets_port[servicePort], packet)
@@ -296,7 +294,7 @@ func main() {
 				packets_flow[flow_idx] = []gopacket.Packet{}
 
 				// dump last 100 packets relative to this port/service (still todo)
-				filename = fmt.Sprintf("%s/total_%s_%s.pcap", port_service_map[servicePort.String()], true_src, time)
+				filename = fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], time)
 				write_pcap(filename, packets_port[servicePort])
 			}
 		}

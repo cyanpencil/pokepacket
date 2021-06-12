@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 	"sort"
+	"golang.org/x/sys/unix"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -46,6 +47,7 @@ func write_pcap(filename string, packets_flow []gopacket.Packet) {
 	for _, p := range packets_flow {
 		pcapw.WritePacket(p.Metadata().CaptureInfo, p.Data())
 	}
+	f.Close()
 }
 
 func list_pcaps(cose string) ([]string, []string) {
@@ -156,6 +158,15 @@ func serve() {
 	http.Handle("/metrics", promhttp.Handler())
 	go http.ListenAndServe(":9001", nil)
 
+	http.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
+		filepath := r.RequestURI[10:]
+		filename := filepath[strings.LastIndexByte(filepath, '/') + 1:]
+		fmt.Printf("dloading %s %s\n", filepath, filename)
+		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
+		w.Header().Set("Content-Type", "application/octet-stream")
+		http.ServeFile(w, r, filepath)
+	})
+
 	tmpl := template.Must(template.ParseFiles("layout/index.html"))
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, port_service_map)
@@ -171,9 +182,10 @@ func serve() {
 				type pageData struct {
 					Services map[string]string
 					Packets  []Packet
+					Filepath string
 				}
 				tmpl := template.Must(template.ParseFiles("layout/pcap.html", "layout/index.html"))
-				tmpl.Execute(w, pageData{port_service_map, packets})
+				tmpl.Execute(w, pageData{port_service_map, packets, filename})
 			} else {
 				pcaps, sizes := list_pcaps(servicename)
 				type pageData struct {
@@ -191,6 +203,7 @@ func serve() {
 }
 
 func main() {
+	unix.Umask(unix.S_IROTH | unix.S_IWOTH)
 	init_config()
 	serve()
 
@@ -244,9 +257,9 @@ func main() {
 
 	packetSrc := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSrc.Packets() {
-		var src, dest string
+		//var src, dest string
 		var srcIp gopacket.Endpoint
-		var dstIp gopacket.Endpoint
+		//var dstIp gopacket.Endpoint
 
 		var inbound bool
 		var servicePort gopacket.Endpoint
@@ -255,7 +268,7 @@ func main() {
 			netFlow := netLayer.NetworkFlow()
 
 			srcIp = netFlow.Src()
-			dstIp = netFlow.Dst()
+			//dstIp = netFlow.Dst()
 		}
 
 		if tcpLayer := packet.TransportLayer(); tcpLayer != nil {
@@ -265,28 +278,40 @@ func main() {
 
 			flow_idx := tcpFlow.FastHash()
 
-			src = srcIp.String() + ":" + srcPort.String()
-			dest = dstIp.String() + ":" + dstPort.String()
+			//src = srcIp.String() + ":" + srcPort.String()
+			//dest = dstIp.String() + ":" + dstPort.String()
 
-			if dstIp.String() == "YOUR LOCAL IP HERE" {
-				inbound = true
-				servicePort = dstPort
-			} else {
+			//if dstIp.String() == "YOUR LOCAL IP HERE" {
+				//inbound = true
+				//servicePort = dstPort
+			//} else {
+				//inbound = false
+				//servicePort = srcPort
+			//}
+			if _,ok := port_service_map[srcPort.String()]; ok {
+				//outgoing = true
 				inbound = false
 				servicePort = srcPort
+			}  else {
+				inbound = true
+				servicePort = dstPort
 			}
+
 
 			// Flow idx (from fasthash) is direction independent
 			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
 			packets_port[servicePort] = append(packets_port[servicePort], packet)
 
-			fmt.Printf("Fwid: %d, length: %d [from %s to %s] inbound(%v) packet\n",
-				flow_idx, len(packets_flow[flow_idx]), src, dest, inbound)
+			if (len(packets_flow[flow_idx]) > 1000) { packets_flow[flow_idx] = packets_flow[flow_idx][1:] }
+			if (len(packets_port[servicePort]) > 1000) { packets_port[servicePort] = packets_port[servicePort][1:] }
+
+			//fmt.Printf("Fwid: %d, length: %d [from %s to %s] inbound(%v) packet\n",
+			//	flow_idx, len(packets_flow[flow_idx]), src, dest, inbound)
 
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
-				fmt.Printf("user %s got flag returned!\n", srcIp)
+				fmt.Printf("user %s got flag returned on service %s!\n", srcIp, port_service_map[servicePort.String()])
 				// dump packets relative to this flow
-				time := time.Now().Format("15_04_03_99")
+				time := time.Now().Format("15h_04m_03s_99")
 				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], time)
 				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag
@@ -294,7 +319,7 @@ func main() {
 				packets_flow[flow_idx] = []gopacket.Packet{}
 
 				// dump last 100 packets relative to this port/service (still todo)
-				filename = fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], time)
+				filename = fmt.Sprintf("%s/total_%s.pcap", port_service_map[servicePort.String()], time)
 				write_pcap(filename, packets_port[servicePort])
 			}
 		}

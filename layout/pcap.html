@@ -10,7 +10,8 @@
 }
 
 .payload {
-	white-space: pre;
+	white-space: pre-wrap;
+	word-wrap: break-word;
 }
 
 .packet {
@@ -19,18 +20,17 @@
 	padding: 0.5em 1em;
 	margin-bottom: 0.5em;
 	word-break: break-all;
+	box-shadow: -3px 3px 0px 0 #333;
 }
 
 .incomingf{
 	margin-left: 4em;
 	margin-right: 0em;
-	box-shadow: -3px 3px 0px 0 #333;
 }
 
 .outgoingf{
 	margin-left: 0em;
 	margin-right: 4em;
-	box-shadow: -3px 3px 0px 0 #333;
 }
 
 .outgoingf span{
@@ -41,13 +41,22 @@
 	color: var(--color-6);
 }
 
+.content {
+	max-width: 60em;
+	margin: auto;
+}
 
 </style>
 
 
+<div class="content">
+
+<div class="packet" style="width:40%; margin: auto"%>
 <center>
 <label for="chkHex"><input type="checkbox" id="chkHex" onclick="togglehex()"/>show hex</label>
+| <a href="/download/{{.Filepath}}"> Download this pcap </a>
 </center>
+</div>
 <br/>
 
 {{ range $p := .Packets}}
@@ -58,6 +67,8 @@
 	</div>
 {{ end }}
 
+
+</div>
 
 <script>
 function togglehex() {

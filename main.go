@@ -35,6 +35,13 @@ type Packet struct {
 	Direction   string
 }
 
+type Config struct {
+	Services map[string]int `yaml:services`
+	Port     int            `yaml:port`
+	Iface    string         `yaml:iface`
+	Flag     string         `yaml:flag`
+}
+
 func write_pcap(filename string, packets_flow []gopacket.Packet) {
 	f, err := os.Create(filepath.Join("dumps", filename))
 	if err != nil {
@@ -69,22 +76,24 @@ func list_pcaps(cose string) ([]string, []string) {
 	return pcaps, sizes
 }
 
-func init_config() {
-	yamlFile, err := ioutil.ReadFile("services.yaml")
+func init_config() *Config {
+	yamlFile, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
-		fmt.Printf("yamlFile.Get err   #%v ", err)
+		fmt.Printf("Failed opening config.yaml: %v\n", err)
 		os.Exit(1)
 	}
 
-	m := make(map[string]int)
-	err = yaml.Unmarshal(yamlFile, &m)
+	config := &Config{}
+
+	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
 		fmt.Printf("failed to unmarshal yaml: %v\n", err)
 		os.Exit(1)
 	}
+
 	port_service_map = make(map[string]string)
 
-	for service, port := range m {
+	for service, port := range config.Services {
 		fmt.Printf("Listening for service \x1b[33;1m%s\x1b[0m on port \x1b[34;1m%d\x1b[0m\n", service, port)
 		foldername := fmt.Sprintf("dumps/%s", service)
 		os.MkdirAll(foldername, os.ModePerm)
@@ -96,6 +105,8 @@ func init_config() {
 		fmt.Printf("directory 'dumps' does not exist!")
 		os.Exit(1)
 	}
+
+	return config
 }
 
 func read_pcap(filename string) []Packet {
@@ -154,9 +165,8 @@ func read_pcap(filename string) []Packet {
 	return to_ret
 }
 
-func serve() {
+func serve(port int) {
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":9001", nil)
 
 	http.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
 		filepath := r.RequestURI[10:]
@@ -198,22 +208,21 @@ func serve() {
 			}
 		})
 	}
-	go http.ListenAndServe(":9000", nil)
-	fmt.Printf("Hosting on http://localhost:9000\n")
+	go http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	fmt.Printf("Hosting on http://localhost:%d\n", port)
 }
 
 func main() {
 	unix.Umask(unix.S_IROTH | unix.S_IWOTH)
-	init_config()
-	serve()
+	config := init_config()
+	serve(config.Port)
 
-	iface := os.Args[1]
-	fmt.Printf("dumping packets on %s\n", iface)
+	fmt.Printf("dumping packets on %s\n", config.Iface)
 
 	// XXX:  change this
 	update_time := time.Second
 
-	handle, err := pcap.OpenLive(iface, 65536, false, update_time)
+	handle, err := pcap.OpenLive(config.Iface, 65536, false, update_time)
 	if err != nil {
 		fmt.Printf("failed to open live: %v\n", err)
 		return
@@ -253,7 +262,7 @@ func main() {
 		"ip",
 	})
 
-	flagBytes := []byte("FAUST_")
+	flagBytes := []byte(config.Flag)
 
 	packetSrc := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSrc.Packets() {

@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"html/template"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"sort"
-	"golang.org/x/sys/unix"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -55,7 +55,7 @@ func list_pcaps(cose string) ([]string, []string) {
 	if err != nil {
 		fmt.Printf("failed to read directory: dumps/%s\n", cose)
 	}
-	sort.Slice(files, func(i,j int) bool{
+	sort.Slice(files, func(i, j int) bool {
 		return files[i].ModTime().Unix() > files[j].ModTime().Unix()
 	})
 
@@ -131,7 +131,7 @@ func read_pcap(filename string) []Packet {
 			dest += ":" + destPort
 
 			outgoing := false
-			if _,ok := port_service_map[srcPort]; ok {
+			if _, ok := port_service_map[srcPort]; ok {
 				outgoing = true
 			}
 
@@ -160,7 +160,7 @@ func serve() {
 
 	http.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
 		filepath := r.RequestURI[10:]
-		filename := filepath[strings.LastIndexByte(filepath, '/') + 1:]
+		filename := filepath[strings.LastIndexByte(filepath, '/')+1:]
 		fmt.Printf("dloading %s %s\n", filepath, filename)
 		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -282,28 +282,31 @@ func main() {
 			//dest = dstIp.String() + ":" + dstPort.String()
 
 			//if dstIp.String() == "YOUR LOCAL IP HERE" {
-				//inbound = true
-				//servicePort = dstPort
+			//inbound = true
+			//servicePort = dstPort
 			//} else {
-				//inbound = false
-				//servicePort = srcPort
+			//inbound = false
+			//servicePort = srcPort
 			//}
-			if _,ok := port_service_map[srcPort.String()]; ok {
+			if _, ok := port_service_map[srcPort.String()]; ok {
 				//outgoing = true
 				inbound = false
 				servicePort = srcPort
-			}  else {
+			} else {
 				inbound = true
 				servicePort = dstPort
 			}
-
 
 			// Flow idx (from fasthash) is direction independent
 			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
 			packets_port[servicePort] = append(packets_port[servicePort], packet)
 
-			if (len(packets_flow[flow_idx]) > 1000) { packets_flow[flow_idx] = packets_flow[flow_idx][1:] }
-			if (len(packets_port[servicePort]) > 1000) { packets_port[servicePort] = packets_port[servicePort][1:] }
+			if len(packets_flow[flow_idx]) > 1000 {
+				packets_flow[flow_idx] = packets_flow[flow_idx][1:]
+			}
+			if len(packets_port[servicePort]) > 1000 {
+				packets_port[servicePort] = packets_port[servicePort][1:]
+			}
 
 			//fmt.Printf("Fwid: %d, length: %d [from %s to %s] inbound(%v) packet\n",
 			//	flow_idx, len(packets_flow[flow_idx]), src, dest, inbound)

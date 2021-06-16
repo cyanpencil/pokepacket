@@ -4,16 +4,16 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"html/template"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"sort"
-	"golang.org/x/sys/unix"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -33,6 +33,13 @@ type Packet struct {
 	Payload_str string
 	Payload_hex string
 	Direction   string
+}
+
+type Config struct {
+	Services map[string]int `yaml:services`
+	Port     int            `yaml:port`
+	Iface    string         `yaml:iface`
+	Flag     string         `yaml:flag`
 }
 
 func write_pcap(filename string, packets_flow []gopacket.Packet) {
@@ -55,7 +62,7 @@ func list_pcaps(cose string) ([]string, []string) {
 	if err != nil {
 		fmt.Printf("failed to read directory: dumps/%s\n", cose)
 	}
-	sort.Slice(files, func(i,j int) bool{
+	sort.Slice(files, func(i, j int) bool {
 		return files[i].ModTime().Unix() > files[j].ModTime().Unix()
 	})
 
@@ -69,22 +76,24 @@ func list_pcaps(cose string) ([]string, []string) {
 	return pcaps, sizes
 }
 
-func init_config() {
-	yamlFile, err := ioutil.ReadFile("services.yaml")
+func init_config() *Config {
+	yamlFile, err := ioutil.ReadFile("config.yaml")
 	if err != nil {
-		fmt.Printf("yamlFile.Get err   #%v ", err)
+		fmt.Printf("Failed opening config.yaml: %v\n", err)
 		os.Exit(1)
 	}
 
-	m := make(map[string]int)
-	err = yaml.Unmarshal(yamlFile, &m)
+	config := &Config{}
+
+	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
 		fmt.Printf("failed to unmarshal yaml: %v\n", err)
 		os.Exit(1)
 	}
+
 	port_service_map = make(map[string]string)
 
-	for service, port := range m {
+	for service, port := range config.Services {
 		fmt.Printf("Listening for service \x1b[33;1m%s\x1b[0m on port \x1b[34;1m%d\x1b[0m\n", service, port)
 		foldername := fmt.Sprintf("dumps/%s", service)
 		os.MkdirAll(foldername, os.ModePerm)
@@ -96,6 +105,8 @@ func init_config() {
 		fmt.Printf("directory 'dumps' does not exist!")
 		os.Exit(1)
 	}
+
+	return config
 }
 
 func read_pcap(filename string) []Packet {
@@ -131,7 +142,7 @@ func read_pcap(filename string) []Packet {
 			dest += ":" + destPort
 
 			outgoing := false
-			if _,ok := port_service_map[srcPort]; ok {
+			if _, ok := port_service_map[srcPort]; ok {
 				outgoing = true
 			}
 
@@ -154,13 +165,12 @@ func read_pcap(filename string) []Packet {
 	return to_ret
 }
 
-func serve() {
+func serve(port int) {
 	http.Handle("/metrics", promhttp.Handler())
-	go http.ListenAndServe(":9001", nil)
 
 	http.HandleFunc("/download/", func(w http.ResponseWriter, r *http.Request) {
 		filepath := r.RequestURI[10:]
-		filename := filepath[strings.LastIndexByte(filepath, '/') + 1:]
+		filename := filepath[strings.LastIndexByte(filepath, '/')+1:]
 		fmt.Printf("dloading %s %s\n", filepath, filename)
 		w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filename))
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -198,22 +208,21 @@ func serve() {
 			}
 		})
 	}
-	go http.ListenAndServe(":9000", nil)
-	fmt.Printf("Hosting on http://localhost:9000\n")
+	go http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	fmt.Printf("Hosting on http://localhost:%d\n", port)
 }
 
 func main() {
 	unix.Umask(unix.S_IROTH | unix.S_IWOTH)
-	init_config()
-	serve()
+	config := init_config()
+	serve(config.Port)
 
-	iface := os.Args[1]
-	fmt.Printf("dumping packets on %s\n", iface)
+	fmt.Printf("dumping packets on %s\n", config.Iface)
 
 	// XXX:  change this
 	update_time := time.Second
 
-	handle, err := pcap.OpenLive(iface, 65536, false, update_time)
+	handle, err := pcap.OpenLive(config.Iface, 65536, false, update_time)
 	if err != nil {
 		fmt.Printf("failed to open live: %v\n", err)
 		return
@@ -253,7 +262,7 @@ func main() {
 		"ip",
 	})
 
-	flagBytes := []byte("FAUST_")
+	flagBytes := []byte(config.Flag)
 
 	packetSrc := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSrc.Packets() {
@@ -282,28 +291,31 @@ func main() {
 			//dest = dstIp.String() + ":" + dstPort.String()
 
 			//if dstIp.String() == "YOUR LOCAL IP HERE" {
-				//inbound = true
-				//servicePort = dstPort
+			//inbound = true
+			//servicePort = dstPort
 			//} else {
-				//inbound = false
-				//servicePort = srcPort
+			//inbound = false
+			//servicePort = srcPort
 			//}
-			if _,ok := port_service_map[srcPort.String()]; ok {
+			if _, ok := port_service_map[srcPort.String()]; ok {
 				//outgoing = true
 				inbound = false
 				servicePort = srcPort
-			}  else {
+			} else {
 				inbound = true
 				servicePort = dstPort
 			}
-
 
 			// Flow idx (from fasthash) is direction independent
 			packets_flow[flow_idx] = append(packets_flow[flow_idx], packet)
 			packets_port[servicePort] = append(packets_port[servicePort], packet)
 
-			if (len(packets_flow[flow_idx]) > 1000) { packets_flow[flow_idx] = packets_flow[flow_idx][1:] }
-			if (len(packets_port[servicePort]) > 1000) { packets_port[servicePort] = packets_port[servicePort][1:] }
+			if len(packets_flow[flow_idx]) > 1000 {
+				packets_flow[flow_idx] = packets_flow[flow_idx][1:]
+			}
+			if len(packets_port[servicePort]) > 1000 {
+				packets_port[servicePort] = packets_port[servicePort][1:]
+			}
 
 			//fmt.Printf("Fwid: %d, length: %d [from %s to %s] inbound(%v) packet\n",
 			//	flow_idx, len(packets_flow[flow_idx]), src, dest, inbound)

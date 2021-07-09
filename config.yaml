@@ -3,7 +3,7 @@ services:
   service1: 8001
   service2: 8002
   service3: 8003
-  service4: 8004
+  service4: 1974
 port: 9000
 iface: "eth0"
-flag: "CTF{"
+flag: "Sq"

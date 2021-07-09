@@ -54,7 +54,7 @@
 <div class="packet" style="width:40%; margin: auto"%>
 <center>
 <label for="chkHex"><input type="checkbox" id="chkHex" onclick="togglehex()"/>show hex</label>
-| <a href="/download/{{.Filepath}}"> Download this pcap </a>
+| <a href="/download/dumps/{{.Filepath}}">          Download this pcap </a>
 </center>
 </div>
 <br/>
@@ -67,6 +67,11 @@
 	</div>
 {{ end }}
 
+<div class="packet" style="width:40%; margin: auto"%>
+<center>
+	<a href="/{{.Filepath}}/pwntools"> Auto-sploiter <br>(Download this flow as pwntools script) </a>
+</center>
+</div>
 
 </div>
 

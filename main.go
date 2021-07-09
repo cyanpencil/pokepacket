@@ -27,6 +27,7 @@ import (
 
 var link_type layers.LinkType
 var port_service_map map[string]string
+var config *Config
 
 type Packet struct {
 	Outgoing    bool
@@ -83,7 +84,7 @@ func init_config() *Config {
 		os.Exit(1)
 	}
 
-	config := &Config{}
+	config = &Config{}
 
 	err = yaml.Unmarshal(yamlFile, &config)
 	if err != nil {
@@ -186,9 +187,10 @@ func serve(port int) {
 		http.HandleFunc("/"+service+"/", func(w http.ResponseWriter, r *http.Request) {
 			ss := strings.Split(r.RequestURI, "/")
 			servicename := ss[1]
-			if len(ss) > 2 && strings.HasSuffix(ss[2], ".pcap") {
-				filename := fmt.Sprintf("dumps/%s/%s", servicename, ss[2])
-				packets := read_pcap(filename)
+			if len(ss) == 3 && strings.HasSuffix(ss[2], ".pcap") {
+				filename := fmt.Sprintf("%s/%s", servicename, ss[2])
+				filepath := fmt.Sprintf("dumps/%s", filename)
+				packets := read_pcap(filepath)
 				type pageData struct {
 					Services map[string]string
 					Packets  []Packet
@@ -196,6 +198,16 @@ func serve(port int) {
 				}
 				tmpl := template.Must(template.ParseFiles("layout/pcap.html", "layout/index.html"))
 				tmpl.Execute(w, pageData{port_service_map, packets, filename})
+			} else if len(ss) == 4 && strings.HasSuffix(ss[3], "pwntools") {
+				filename := fmt.Sprintf("%s/%s", servicename, ss[2])
+				filepath := fmt.Sprintf("dumps/%s", filename)
+				packets := read_pcap(filepath)
+				type pageData struct {
+					Flag string
+					Packets  []Packet
+				}
+				tmpl := template.Must(template.ParseFiles("layout/pwntools.html", "layout/index.html"))
+				tmpl.Execute(w, pageData{config.Flag, packets})
 			} else {
 				pcaps, sizes := list_pcaps(servicename)
 				type pageData struct {
@@ -217,16 +229,25 @@ func main() {
 	config := init_config()
 	serve(config.Port)
 
-	fmt.Printf("dumping packets on %s\n", config.Iface)
+	var handle *pcap.Handle
+	var err error
 
-	// XXX:  change this
-	update_time := time.Second
-
-	handle, err := pcap.OpenLive(config.Iface, 65536, false, update_time)
+	if len(os.Args) == 1 {
+		fmt.Printf("dumping packets on %s\n", config.Iface)
+		update_time := time.Second // do we really want to capture each second
+		handle, err = pcap.OpenLive(config.Iface, 65536, false, update_time)
+	} else {
+		filename := os.Args[1]
+		fmt.Printf("parsing pcap %s\n", filename)
+		handle, err = pcap.OpenOffline(filename)
+	}
 	if err != nil {
-		fmt.Printf("failed to open live: %v\n", err)
+		fmt.Printf("failed to open pcap/interface: %v\n", err)
 		return
 	}
+
+
+
 	link_type = handle.LinkType()
 
 	filter := ""
@@ -323,7 +344,7 @@ func main() {
 			if bytes.Contains(tcpLayer.LayerPayload(), flagBytes) {
 				fmt.Printf("user %s got flag returned on service %s!\n", srcIp, port_service_map[servicePort.String()])
 				// dump packets relative to this flow
-				time := time.Now().Format("15h_04m_03s_99")
+				time := time.Now().Format("15h_04m_03.9999s")
 				filename := fmt.Sprintf("%s/flag_%s.pcap", port_service_map[servicePort.String()], time)
 				write_pcap(filename, packets_flow[flow_idx])
 				// reset  packets of this flow, as we got flag
@@ -341,6 +362,9 @@ func main() {
 			c = outbound
 		}
 		c.WithLabelValues(srcIp.String()).Add(float64(packet.Metadata().CaptureLength))
+
 		//fmt.Printf("Received packet from %s to %s, size: %d\n", src, dest, packet.Metadata().CaptureInfo.CaptureLength)
 	}
+
+	time.Sleep(50 * time.Hour)
 }
